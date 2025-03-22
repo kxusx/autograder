@@ -1,2 +1,7 @@
 streamlit
 PyPDF2
+pdf2image
+Pillow
+numpy
+python-dotenv
+google-generativeai
