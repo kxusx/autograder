@@ -73,90 +73,112 @@ def extract_text_from_digital_pdf(pdf_file):
         raise Exception(f"Error reading PDF file: {str(e)}")
 
 def main():
-    st.title("Texas A&M AutoGrader")
-    st.write("Upload a student's handwritten answer sheet and the digital answer key")
+    st.title("PDF Answer Sheet Comparison")
+    
+    # First get the number of students
+    num_students = st.number_input("How many student answer sheets would you like to upload?", 
+                                 min_value=1, 
+                                 max_value=50,  # You can adjust this limit
+                                 value=1)
+    
+    # Upload answer key first
+    key_pdf = st.file_uploader("Upload Answer Key (Digital PDF)", type=['pdf'])
+    
+    # Create a dictionary to store all student data
+    students_data = {}
+    
+    # Create file uploaders for each student
+    for i in range(int(num_students)):
+        student_name = st.text_input(f"Enter Student {i+1}'s Name", key=f"student_name_{i}")
+        student_pdf = st.file_uploader(f"Upload Student {i+1}'s Answer Sheet", 
+                                     type=['pdf'],
+                                     key=f"student_pdf_{i}")
+        
+        if student_name and student_pdf:
+            students_data[student_name] = {"pdf": student_pdf}
 
-    # File uploaders
-    student_pdf = st.file_uploader("Upload Student's Handwritten Answer Sheet", type=['pdf'])
-    key_pdf = st.file_uploader("Upload Answer Key", type=['pdf'])
-
-    if student_pdf is not None and key_pdf is not None:
+    if key_pdf is not None and len(students_data) > 0:
         st.write("Files uploaded successfully!")
         
         try:
-            with st.spinner("Processing handwritten answers using Gemini AI (this may take a while)..."):
-                student_text = extract_text_from_handwritten_pdf(student_pdf)
-            
+            # Process answer key using PyPDF2
             with st.spinner("Processing answer key..."):
+                key_pdf.seek(0)
                 key_text = extract_text_from_digital_pdf(key_pdf)
-
-            # Display the extracted text
-            col1, col2 = st.columns(2)
             
-            with col1:
-                st.subheader("Student's Answers (Gemini AI Result)")
-                st.text_area("Content", student_text, height=400)
-                
-                # Display the original image for verification
-                st.subheader("Original Answer Sheet")
-                try:
-                    # Reset file pointer to beginning
-                    student_pdf.seek(0)
-                    images = convert_from_bytes(student_pdf.read())
-                    for i, image in enumerate(images):
-                        st.image(image, caption=f"Page {i+1}", use_column_width=True)
-                except Exception as e:
-                    st.error(f"Error displaying student PDF: {str(e)}")
-
-            with col2:
-                st.subheader("Answer Key")
-                try:
-                    # Reset file pointer to beginning
-                    key_pdf.seek(0)
-                    # Validate PDF before processing
-                    if key_pdf.size > 0:  # Check if file is not empty
-                        key_text = extract_text_from_digital_pdf(key_pdf)
-                        st.text_area("Content", key_text, height=400)
-                    else:
-                        st.error("The answer key PDF file appears to be empty")
-                        key_text = ""
-                except Exception as e:
-                    st.error(f"Error processing answer key PDF: {str(e)}")
-                    key_text = ""
-
-            # Add a button to compare
-            if st.button("Compare Answers"):
-                st.subheader("Comparison Results")
-                st.info("Using Gemini AI for handwriting recognition")
-                
-                # Ask Gemini to compare the answers
-                comparison_prompt = f"""
-                Compare the following student answers with the answer key.
-                Provide a short analysis of matching and non-matching answers.
-                Calculate an approximate score and privde it as "Score: score/100". 
-
-                Student Answers:
-                {student_text}
-
-                Answer Key:
-                {key_text}
-                """
-                
-                try:
-                    comparison_response = model.generate_content(comparison_prompt)
-                    st.write("AI Analysis:")
-                    st.write(comparison_response.text)
-                except Exception as e:
-                    st.error(f"Error during comparison: {str(e)}")
+            # Process each student's submission
+            for student_name, data in students_data.items():
+                with st.spinner(f"Processing {student_name}'s answers..."):
+                    data['pdf'].seek(0)
+                    student_text = extract_text_from_handwritten_pdf(data['pdf'])
+                    students_data[student_name]['text'] = student_text
                     
-                # Also show basic similarity score
-                from difflib import SequenceMatcher
-                similarity = SequenceMatcher(None, student_text, key_text).ratio()
-                st.write(f"Text Similarity Score: {similarity:.2%}")
+                    # Generate comparison right away
+                    comparison_prompt = f"""
+                    Compare the following student answers with the answer key.
+                    Provide a short analysis of matching and non-matching answers.
+                    Calculate an approximate score and provide it as "Score: score/100". 
+
+                    Student Answers:
+                    {student_text}
+
+                    Answer Key:
+                    {key_text}
+                    """
+                    
+                    comparison_response = model.generate_content(comparison_prompt)
+                    students_data[student_name]['analysis'] = comparison_response.text
+
+            # Display results in expandable sections
+            st.subheader("Answer Key")
+            with st.expander("View Answer Key"):
+                st.text_area("Content", key_text, height=200)
+                key_pdf.seek(0)
+                images = convert_from_bytes(key_pdf.read())
+                for i, image in enumerate(images):
+                    st.image(image, caption=f"Page {i+1}", use_column_width=True)
+
+            st.subheader("Student Submissions")
+            
+            # Display student submissions
+            for student_name, data in students_data.items():
+                with st.expander(f"📝 {student_name}"):
+                    # Create tabs for different views
+                    tabs = st.tabs(["AI Analysis", "Transcribed Answer", "Original PDF"])
+                    
+                    with tabs[0]:
+                        st.write("AI Analysis:")
+                        st.write(data['analysis'])
+                    
+                    with tabs[1]:
+                        st.text_area("Transcribed Content", data['text'], height=200)
+                    
+                    with tabs[2]:
+                        data['pdf'].seek(0)
+                        images = convert_from_bytes(data['pdf'].read())
+                        for i, image in enumerate(images):
+                            st.image(image, caption=f"Page {i+1}", use_column_width=True)
+
+            # Add download button for results
+            if st.button("Download All Results"):
+                results_text = "Answer Sheet Analysis Results\n\n"
+                results_text += f"Answer Key:\n{key_text}\n\n"
+                for student_name, data in students_data.items():
+                    results_text += f"\n{'='*50}\n"
+                    results_text += f"Student: {student_name}\n"
+                    results_text += f"Analysis:\n{data['analysis']}\n"
+                    results_text += f"Transcribed Answer:\n{data['text']}\n"
+                
+                st.download_button(
+                    label="Download Results as Text",
+                    data=results_text,
+                    file_name="grading_results.txt",
+                    mime="text/plain"
+                )
 
         except Exception as e:
             st.error(f"An error occurred during processing: {str(e)}")
-            st.write("Please make sure the PDF files are valid and not corrupted.")
+            st.write("Please make sure all PDF files are valid and not corrupted.")
 
 if __name__ == "__main__":
     main()
