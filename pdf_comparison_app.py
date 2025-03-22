@@ -73,7 +73,7 @@ def extract_text_from_digital_pdf(pdf_file):
         raise Exception(f"Error reading PDF file: {str(e)}")
 
 def main():
-    st.title("PDF Answer Sheet Comparison")
+    st.title("Texas A&M AutoGrader")
     st.write("Upload a student's handwritten answer sheet and the digital answer key")
 
     # File uploaders
@@ -132,8 +132,8 @@ def main():
                 # Ask Gemini to compare the answers
                 comparison_prompt = f"""
                 Compare the following student answers with the answer key.
-                Provide a detailed analysis of matching and non-matching answers.
-                Calculate an approximate score.
+                Provide a short analysis of matching and non-matching answers.
+                Calculate an approximate score and privde it as "Score: score/100". 
 
                 Student Answers:
                 {student_text}
