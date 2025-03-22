@@ -7,6 +7,7 @@ import numpy as np
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+import pandas as pd
 
 # Load environment variables
 load_dotenv()
@@ -78,18 +79,18 @@ def get_student_name(filename):
 
 def extract_score(analysis_text):
     try:
-        # Find the last occurrence of "Total Score:" and extract the score
+        # Find the last occurrence of "Total Score:" and extract just the score portion
         if "Total Score:" in analysis_text:
-            score = analysis_text.split("Total Score:")[-1].strip()
+            score = analysis_text.split("Total Score:")[-1].strip().split('\n')[0]
             return score
         if "Total score:" in analysis_text:
-            score = analysis_text.split("Total Score:")[-1].strip()
+            score = analysis_text.split("Total score:")[-1].strip().split('\n')[0]
             return score
         if "Total Score : " in analysis_text:
-            score = analysis_text.split("Total Score:")[-1].strip()
+            score = analysis_text.split("Total Score : ")[-1].strip().split('\n')[0]
             return score
         if "Total Score :" in analysis_text:
-            score = analysis_text.split("Total Score:")[-1].strip()
+            score = analysis_text.split("Total Score :")[-1].strip().split('\n')[0]
             return score
         return "N/A"
     except:
@@ -161,10 +162,13 @@ def main():
             
             # Display student submissions
             for student_name, data in students_data.items():
-                # Extract score from analysis
+                # Extract score from analysis and ensure it's clean
                 score = extract_score(data['analysis'])
+                # Limit the score display to 20 characters max
+                display_score = score[:20] if score else "N/A"
+                
                 # Display name and score in the expander header
-                with st.expander(f"📝 {student_name} - {score}"):
+                with st.expander(f"📝 {student_name} - {display_score}"):
                     # Create tabs for different views
                     tabs = st.tabs(["AI Analysis", "Transcribed Answer", "Original PDF"])
                     
@@ -181,8 +185,11 @@ def main():
                         for i, image in enumerate(images):
                             st.image(image, caption=f"Page {i+1}", use_column_width=True)
 
-            # Add download button for results
-            if st.button("Download All Results"):
+            # Add buttons for both text and Excel downloads
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Create the text content first
                 results_text = "Answer Sheet Analysis Results\n\n"
                 results_text += f"Answer Key:\n{key_text}\n\n"
                 for student_name, data in students_data.items():
@@ -191,12 +198,31 @@ def main():
                     results_text += f"Analysis:\n{data['analysis']}\n"
                     results_text += f"Transcribed Answer:\n{data['text']}\n"
                 
+                # Use the download button directly without an if condition
                 st.download_button(
                     label="Download Results as Text",
                     data=results_text,
                     file_name="grading_results.txt",
                     mime="text/plain"
                 )
+                
+            with col2:
+                # Create DataFrame directly from existing data
+                df = pd.DataFrame({
+                    'Student Name': [student_name for student_name in students_data.keys()],
+                    'Score': [extract_score(data['analysis']) for data in students_data.values()]
+                })
+                
+                # Use the download button directly
+                st.download_button(
+                    label="Download Results as Excel",
+                    data=df.to_csv(index=False).encode('utf-8'),
+                    file_name="student_scores.csv",
+                    mime="text/csv"
+                )
+                    
+                   
+
 
         except Exception as e:
             st.error(f"An error occurred during processing: {str(e)}")
