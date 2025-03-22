@@ -97,7 +97,7 @@ def extract_score(analysis_text):
         return "N/A"
 
 def main():
-    st.title("PDF Answer Sheet Comparison")
+    st.title("Texas A&M AutoGrader")
     
     # Upload answer key first
     key_pdf = st.file_uploader("Upload Answer Key (Digital PDF)", type=['pdf'])
