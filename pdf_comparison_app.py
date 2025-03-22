@@ -72,33 +72,50 @@ def extract_text_from_digital_pdf(pdf_file):
     except Exception as e:
         raise Exception(f"Error reading PDF file: {str(e)}")
 
+def get_student_name(filename):
+    # Remove .pdf extension and return the filename as student name
+    return filename.replace('.pdf', '')
+
+def extract_score(analysis_text):
+    try:
+        # Find the last occurrence of "Total Score:" and extract the score
+        if "Total Score:" in analysis_text:
+            score = analysis_text.split("Total Score:")[-1].strip()
+            return score
+        if "Total score:" in analysis_text:
+            score = analysis_text.split("Total Score:")[-1].strip()
+            return score
+        if "Total Score : " in analysis_text:
+            score = analysis_text.split("Total Score:")[-1].strip()
+            return score
+        if "Total Score :" in analysis_text:
+            score = analysis_text.split("Total Score:")[-1].strip()
+            return score
+        return "N/A"
+    except:
+        return "N/A"
+
 def main():
     st.title("PDF Answer Sheet Comparison")
-    
-    # First get the number of students
-    num_students = st.number_input("How many student answer sheets would you like to upload?", 
-                                 min_value=1, 
-                                 max_value=50,  # You can adjust this limit
-                                 value=1)
     
     # Upload answer key first
     key_pdf = st.file_uploader("Upload Answer Key (Digital PDF)", type=['pdf'])
     
+    # Single uploader for multiple student PDFs
+    student_pdfs = st.file_uploader("Upload Student Answer Sheets", 
+                                   type=['pdf'],
+                                   accept_multiple_files=True)
+    
     # Create a dictionary to store all student data
     students_data = {}
     
-    # Create file uploaders for each student
-    for i in range(int(num_students)):
-        student_name = st.text_input(f"Enter Student {i+1}'s Name", key=f"student_name_{i}")
-        student_pdf = st.file_uploader(f"Upload Student {i+1}'s Answer Sheet", 
-                                     type=['pdf'],
-                                     key=f"student_pdf_{i}")
-        
-        if student_name and student_pdf:
-            students_data[student_name] = {"pdf": student_pdf}
+    # Process uploaded student PDFs
+    for student_pdf in student_pdfs:
+        student_name = get_student_name(student_pdf.name)
+        students_data[student_name] = {"pdf": student_pdf}
 
     if key_pdf is not None and len(students_data) > 0:
-        st.write("Files uploaded successfully!")
+        st.write(f"Files uploaded successfully! Processing {len(students_data)} student submissions...")
         
         try:
             # Process answer key using PyPDF2
@@ -117,8 +134,10 @@ def main():
                     comparison_prompt = f"""
                     Compare the following student answers with the answer key.
                     Provide a short analysis of matching and non-matching answers.
-                    Calculate an approximate score and provide it as "Score: score/100". 
-
+                  
+                    I want the output to be structured in the following way:
+                    Question wise Matching Aspects and non-matching aspects and score for that question
+                    and in the end there will be "Total Score : 'score'/100"
                     Student Answers:
                     {student_text}
 
@@ -142,7 +161,10 @@ def main():
             
             # Display student submissions
             for student_name, data in students_data.items():
-                with st.expander(f"📝 {student_name}"):
+                # Extract score from analysis
+                score = extract_score(data['analysis'])
+                # Display name and score in the expander header
+                with st.expander(f"📝 {student_name} - {score}"):
                     # Create tabs for different views
                     tabs = st.tabs(["AI Analysis", "Transcribed Answer", "Original PDF"])
                     
