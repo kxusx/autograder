@@ -73,9 +73,6 @@ streamlit run pdf_comparison_app.py
 ## Technical Requirements
 See `requirements.txt` for a complete list of Python dependencies.
 
-## License
-[Your License Type]
-
 ## Contributors
 Khush Patel @kxusx
 Rahul Baid @rahulb99
