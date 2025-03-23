@@ -1,7 +1,10 @@
 streamlit
-PyPDF2
 pdf2image
+PyPDF2
 Pillow
 numpy
-python-dotenv
 google-generativeai
+python-dotenv
+authlib
+requests
+streamlit-auth0
