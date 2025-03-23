@@ -1,16 +1,13 @@
 import streamlit as st
 from pdf2image import convert_from_bytes
 import PyPDF2
-import io
-from PIL import Image
-import numpy as np
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
-import json
 from authlib.integrations.requests_client import OAuth2Session
 import requests
 from urllib.parse import urlencode
+import pandas as pd
 
 
 # Load environment variables
@@ -96,6 +93,29 @@ def extract_text_from_digital_pdf(pdf_file):
     except Exception as e:
         raise Exception(f"Error reading PDF file: {str(e)}")
 
+def get_student_name(filename):
+    # Remove .pdf extension and return the filename as student name
+    return filename.replace('.pdf', '')
+
+def extract_score(analysis_text):
+    try:
+        # Find the last occurrence of "Total Score:" and extract just the score portion
+        if "Total Score:" in analysis_text:
+            score = analysis_text.split("Total Score:")[-1].strip().split('\n')[0]
+            return score
+        if "Total score:" in analysis_text:
+            score = analysis_text.split("Total score:")[-1].strip().split('\n')[0]
+            return score
+        if "Total Score : " in analysis_text:
+            score = analysis_text.split("Total Score : ")[-1].strip().split('\n')[0]
+            return score
+        if "Total Score :" in analysis_text:
+            score = analysis_text.split("Total Score :")[-1].strip().split('\n')[0]
+            return score
+        return "N/A"
+    except:
+        return "N/A"
+
 def login():
     # Generate a secure random state parameter and store it in session state
     if 'auth_state' not in st.session_state:
@@ -116,12 +136,12 @@ def handle_auth_callback():
     # Get query parameters
     query_params = st.experimental_get_query_params()
     code = query_params.get("code", [None])[0]
-    state = query_params.get("state", [None])[0]
+    state = query_params.get("auth_state", [None])[0]
     
     # # Verify state to prevent CSRF attacks
-    # if state != st.session_state.get("auth_state"):
-    #     st.error("Invalid state parameter. Possible CSRF attack.")
-    #     return
+    if state != st.session_state.get("auth_state"):
+        st.error("Invalid state parameter. Possible CSRF attack.")
+        return
     
     if code:
         try:
@@ -199,7 +219,7 @@ def show_user_info():
 
 
 def main():
-    st.title("TAMU AutoGrader")
+    st.title("Texas A&M AutoGrader")
     
     # Handle Auth0 callback if code parameter is present
     query_params = st.experimental_get_query_params()
@@ -211,30 +231,24 @@ def main():
         
         # Only show app content if user is authenticated
         if st.session_state.user:
-            # First get the number of students
-            num_students = st.number_input("How many student answer sheets would you like to upload?", 
-                                        min_value=1, 
-                                        max_value=50,  # You can adjust this limit
-                                        value=1)
-            
             # Upload answer key first
             key_pdf = st.file_uploader("Upload Answer Key (Digital PDF)", type=['pdf'])
+            
+            # Single uploader for multiple student PDFs
+            student_pdfs = st.file_uploader("Upload Student Answer Sheets", 
+                                        type=['pdf'],
+                                        accept_multiple_files=True)
             
             # Create a dictionary to store all student data
             students_data = {}
             
-            # Create file uploaders for each student
-            for i in range(int(num_students)):
-                student_name = st.text_input(f"Enter Student {i+1}'s Name", key=f"student_name_{i}")
-                student_pdf = st.file_uploader(f"Upload Student {i+1}'s Answer Sheet", 
-                                            type=['pdf'],
-                                            key=f"student_pdf_{i}")
-                
-                if student_name and student_pdf:
-                    students_data[student_name] = {"pdf": student_pdf}
+            # Process uploaded student PDFs
+            for student_pdf in student_pdfs:
+                student_name = get_student_name(student_pdf.name)
+                students_data[student_name] = {"pdf": student_pdf}
 
             if key_pdf is not None and len(students_data) > 0:
-                st.write("Files uploaded successfully!")
+                st.write(f"Files uploaded successfully! Processing {len(students_data)} student submissions...")
                 
                 try:
                     # Process answer key using PyPDF2
@@ -253,8 +267,10 @@ def main():
                             comparison_prompt = f"""
                             Compare the following student answers with the answer key.
                             Provide a short analysis of matching and non-matching answers.
-                            Calculate an approximate score and provide it as "Score: score/100". 
-
+                        
+                            I want the output to be structured in the following way:
+                            Question wise Matching Aspects and non-matching aspects and score for that question
+                            and in the end there will be "Total Score : 'score'/100"
                             Student Answers:
                             {student_text}
 
@@ -278,7 +294,13 @@ def main():
                     
                     # Display student submissions
                     for student_name, data in students_data.items():
-                        with st.expander(f"📝 {student_name}"):
+                        # Extract score from analysis and ensure it's clean
+                        score = extract_score(data['analysis'])
+                        # Limit the score display to 20 characters max
+                        display_score = score[:20] if score else "N/A"
+                        
+                        # Display name and score in the expander header
+                        with st.expander(f"📝 {student_name} - {display_score}"):
                             # Create tabs for different views
                             tabs = st.tabs(["AI Analysis", "Transcribed Answer", "Original PDF"])
                             
@@ -295,8 +317,11 @@ def main():
                                 for i, image in enumerate(images):
                                     st.image(image, caption=f"Page {i+1}", use_column_width=True)
 
-                    # Add download button for results
-                    if st.button("Download All Results"):
+                    # Add buttons for both text and Excel downloads
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # Create the text content first
                         results_text = "Answer Sheet Analysis Results\n\n"
                         results_text += f"Answer Key:\n{key_text}\n\n"
                         for student_name, data in students_data.items():
@@ -305,11 +330,27 @@ def main():
                             results_text += f"Analysis:\n{data['analysis']}\n"
                             results_text += f"Transcribed Answer:\n{data['text']}\n"
                         
+                        # Use the download button directly without an if condition
                         st.download_button(
                             label="Download Results as Text",
                             data=results_text,
                             file_name="grading_results.txt",
                             mime="text/plain"
+                        )
+                        
+                    with col2:
+                        # Create DataFrame directly from existing data
+                        df = pd.DataFrame({
+                            'Student Name': [student_name for student_name in students_data.keys()],
+                            'Score': [extract_score(data['analysis']) for data in students_data.values()]
+                        })
+                        
+                        # Use the download button directly
+                        st.download_button(
+                            label="Download Results as Excel",
+                            data=df.to_csv(index=False).encode('utf-8'),
+                            file_name="student_scores.csv",
+                            mime="text/csv"
                         )
 
                 except Exception as e:
