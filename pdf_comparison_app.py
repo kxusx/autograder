@@ -38,7 +38,7 @@ model = genai.GenerativeModel('gemini-2.0-flash-exp-image-generation', generatio
 if 'user' not in st.session_state:
     st.session_state.user = None
 
-def extract_text_from_handwritten_pdf(pdf_file):
+def extract_text_from_pdf(pdf_file, is_handwritten=True):
     # Convert PDF to images
     images = convert_from_bytes(pdf_file.read())
     text = ""
@@ -52,14 +52,22 @@ def extract_text_from_handwritten_pdf(pdf_file):
         
         # Create prompt for Gemini
         prompt = """
-        Please extract all the text from this handwritten answer sheet image.
+        Please extract all the text from this image.
         Return only the extracted text, without any additional commentary.
-        Be as accurate as possible in reading the handwriting.
+        Be as accurate as possible in reading the text.
         """
+        if is_handwritten:
+            prompt = """
+            Please extract all the text from this handwritten answer sheet image.
+            Return only the extracted text, without any additional commentary.
+            Be as accurate as possible in reading the handwriting.
+            """
         
         # Get response from Gemini
         try:
-            response = model.generate_content([prompt, rgb_image])
+            response = model.generate_content([prompt, rgb_image], generation_config={
+                'temperature': 1.0
+            })
             page_text = response.text
             text += page_text + "\n\n--- Page Break ---\n\n"
         except Exception as e:
@@ -101,19 +109,21 @@ def get_student_name(filename):
 def extract_score(analysis_text):
     try:
         # Find the last occurrence of "Total Score:" and extract just the score portion
+        score = "N/A"
         if "Total Score:" in analysis_text:
             score = analysis_text.split("Total Score:")[-1].strip().split('\n')[0]
-            return score
-        if "Total score:" in analysis_text:
+        elif "Total score:" in analysis_text:
             score = analysis_text.split("Total score:")[-1].strip().split('\n')[0]
-            return score
-        if "Total Score : " in analysis_text:
+        elif "Total Score : " in analysis_text:
             score = analysis_text.split("Total Score : ")[-1].strip().split('\n')[0]
-            return score
-        if "Total Score :" in analysis_text:
+        elif "Total Score :" in analysis_text:
             score = analysis_text.split("Total Score :")[-1].strip().split('\n')[0]
-            return score
-        return "N/A"
+        
+        # Clean up the score by removing any non-numeric characters except '/'
+        cleaned_score = ''.join(char for char in score if char.isdigit() or char == '/')
+        
+        # If we found a score, return it, otherwise return "N/A"
+        return cleaned_score if cleaned_score else "N/A"
     except:
         return "N/A"
 
@@ -258,13 +268,15 @@ def main():
                 try:
                     with st.spinner("Processing answer key..."):
                         key_pdf.seek(0)
-                        key_text = extract_text_from_digital_pdf(key_pdf)
-                        st.session_state.key_text = key_text  # Store key_text in session state
+                        # Process answer key through Gemini with is_handwritten=False
+                        key_text = extract_text_from_pdf(key_pdf, is_handwritten=False)
+                        st.session_state.key_text = key_text
 
                     for student_name, data in students_data.items():
                         with st.spinner(f"Processing {student_name}'s answers..."):
                             data['pdf'].seek(0)
-                            student_text = extract_text_from_handwritten_pdf(data['pdf'])
+                            # Process student submissions with is_handwritten=True
+                            student_text = extract_text_from_pdf(data['pdf'], is_handwritten=True)
                             students_data[student_name]['text'] = student_text
                             
                             comparison_prompt = f"""
@@ -281,7 +293,9 @@ def main():
                             {key_text}
                             """
                             
-                            comparison_response = model.generate_content(comparison_prompt)
+                            comparison_response = model.generate_content(comparison_prompt, generation_config={
+                                'temperature': 1.0
+                            })
                             students_data[student_name]['analysis'] = comparison_response.text
 
                     # Store processed data in session state
@@ -312,9 +326,7 @@ def main():
                 # Display student submissions
                 for student_name, data in st.session_state.students_data.items():
                     score = extract_score(data['analysis'])
-                    display_score = score[:20] if score else "N/A"
-                    
-                    with st.expander(f"📝 {student_name} - {display_score}", expanded=False):
+                    with st.expander(f"📝 {student_name} - {score}", expanded=False):
                         tabs = st.tabs(["AI Analysis", "Transcribed Answer", "Original PDF"])
                         
                         with tabs[0]:
@@ -364,7 +376,7 @@ def main():
                         mime="text/csv"
                     )
         else:
-            st.warning("Log in to use the app.")
+            st.warning("")
 
 if __name__ == "__main__":
     main()

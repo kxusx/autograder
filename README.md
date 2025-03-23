@@ -5,7 +5,7 @@ Texas A&M AutoGrader is an AI-powered application designed to streamline the gra
 
 ### Key Features
 - Secure authentication using Auth0
-- Digital answer key upload and processing
+- Answer key upload and processing
 - Multiple handwritten student submission processing
 - AI-powered text extraction from handwritten documents
 - Detailed comparison and scoring analysis
@@ -56,9 +56,9 @@ streamlit run pdf_comparison_app.py
 
 3. Log in using Auth0 authentication
 
-4. Upload the digital answer key PDF
+4. Upload the answer key PDF
 
-5. Upload student submission PDFs (handwritten)
+5. Upload student submission PDFs 
 
 6. Wait for the AI to process and analyze the submissions
 
