@@ -9,7 +9,6 @@ import requests
 from urllib.parse import urlencode
 import pandas as pd
 
-
 # Load environment variables
 load_dotenv()
 GEMINI_API_KEY = os.getenv('gemini-key')
@@ -138,7 +137,7 @@ def handle_auth_callback():
     code = query_params.get("code", [None])[0]
     state = query_params.get("auth_state", [None])[0]
     
-    # # Verify state to prevent CSRF attacks
+    # Verify state to prevent CSRF attacks
     if state != st.session_state.get("auth_state"):
         st.error("Invalid state parameter. Possible CSRF attack.")
         return
@@ -316,7 +315,7 @@ def main():
                                 images = convert_from_bytes(data['pdf'].read())
                                 for i, image in enumerate(images):
                                     st.image(image, caption=f"Page {i+1}", use_column_width=True)
-
+                                    
                     # Add buttons for both text and Excel downloads
                     col1, col2 = st.columns(2)
                     
