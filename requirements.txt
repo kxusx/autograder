@@ -1,10 +1,7 @@
-streamlit
-pdf2image
-PyPDF2
-Pillow
-numpy
-google-generativeai
-python-dotenv
-authlib
-requests
-streamlit-auth0
+streamlit==1.43.2
+pdf2image==1.17.0
+PyPDF2==3.0.1
+google-generativeai==0.8.4
+python-dotenv==1.0.1
+authlib==1.5.1
+requests==2.32.3
